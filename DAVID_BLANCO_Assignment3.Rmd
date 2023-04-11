@@ -1,0 +1,219 @@
+---
+title: "DAVID_BLANCO_Assignment3"
+author: "David Blanco 000858381"
+date: "2023-04-06"
+output: html_document
+---
+```{r echo=TRUE, include=FALSE}
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(ggcorrplot)
+library(purrr)
+```
+# About Dataset
+The original data was taken from: https://www.kaggle.com/datasets/salvatorerastelli/spotify-and-youtube
+
+The dataset shows the statistics for the Top 10 songs of various spotify artists and their yt video
+
+# Import the data
+Read the file Spotify_Youtube.csv, save it in a tibble, and select the relevant data.
+
+```{r}
+df<- read.csv("Spotify_Youtube.csv", header = TRUE)
+names(df)
+```
+The previous output shows all the fields in the data frame, for the analysis the data frame will be changed to a tibble (using the library **Tydir**) and will not take account the fields uri, url, description, licensed and official video. 
+
+```{r}
+tb <- select(df,"X", "Artist", "Track","Album", "Album_type", "Danceability", "Energy", "Key", "Loudness", "Speechiness", "Acousticness", "Instrumentalness", "Liveness", "Valence", "Tempo", "Duration_ms", "Title", "Channel", "Views", "Likes", "Comments", "official_video", "Stream") %>% as_tibble()
+```
+## Data Cleaning
+
+Eliminate null values (na)
+
+```{r}
+tb <- na.omit(tb)
+```
+Eliminate the track that are duplicated but are performance by different artists.
+```{r}
+tb <- tb %>%
+  distinct(Track,.keep_all = TRUE)
+```
+
+## Add  total_plays field
+The new field will be calculated adding the number of views in youtube and the number of streams in spotify. This new field will be called total_plays.
+
+```{r}
+tb <- tb %>% 
+  mutate(total_plays = Views + Stream)
+```
+
+
+# Descriptive analysis 
+After select the quantitative variables with the function summary we obtain the descriptive analysis of these variables.
+
+```{r}
+quant_var <- select(tb, "Danceability","Energy", "Key", "Loudness", "Speechiness", "Acousticness", "Instrumentalness", "Liveness", "Valence", "Tempo", "Duration_ms","Views", "Likes", "Comments", "Stream", "total_plays" )
+summary(quant_var)
+
+```
+
+## Correlation Matrix
+
+The correlation matrix shows that there are not any relevant correlation between the variables and analyze them
+
+```{r}
+corr_mat <- cor(quant_var)
+ggcorrplot(corr_mat, hc.order = TRUE,
+    type = "lower")
+```
+
+The correlation matrix show a high correlation in the data is between the views in youtube with likes and comments. We can say that the high number of views cause a high number of likes and comments, but to be sure about this statement it would be necessary to develop a deeper tests that wont be show in this analysis.  
+
+# Histograms of quantitative variables
+
+Next with the use of purrr library and ggplot2 all the quantitative variables will show his respective histogram to be analyzed. 
+```{r}
+
+to_plot_hist <- c( "Danceability","Energy", "Key", "Loudness", "Speechiness", "Acousticness", "Instrumentalness", "Liveness", "Valence", "Tempo", "Duration_ms","Views", "Likes", "Comments", "Stream", "total_plays" )
+
+# Define the bin size of each of the histograms
+binwidths <- c(Danceability = 0.05, Energy = 0.05, Key = 1, Loudness = 2.5, 
+               Speechiness = 0.05, Acousticness = 0.05, Instrumentalness = 0.05, 
+               Liveness = 0.05, Valence = 0.05, Tempo = 10, Duration_ms = 100000,
+               Views =100000000, Likes = 1000000, Comments = 100000,
+               Stream = 100000000, total_plays = 100000000)
+
+
+# Define a function that takes a variable name and generates the corresponding histogram
+generate_histogram <- function(var,binwidth) {
+  ggplot(tb, aes(x = !!sym(var))) +
+    geom_histogram(binwidth = binwidth, color = "black", fill = "lightblue") +
+    labs(title = paste0("Histogram of ", var))
+}
+
+# Use purrr's map() function to apply the generate_histogram function to each variable in quant_var
+histograms <- map2(to_plot_hist,binwidths, generate_histogram)
+
+# Print the histograms
+histograms
+```
+
+From the histograms we can conclude: 
+
+* The characteristics of the variables danceability, energy, loudness and valence follow a normal distribution skewed to the left.
+* The histogram of key variable is uniform, This shows the variability of the songs in this specific variable.  
+* The characteristics of the variables speechiness acousticness, instrumentalness, liveness follow a normal distribution skewed to the left. 
+* The only variable with a normal distribution was the Tempo variable.  
+* The histograms of Duration, views, likes, comments, stream, total_plays. Shows a very skewed to the right. This means that those variables have multiple outliers. This outliers are relevant because those are the more popular songs with any measure that we choose to select a sucessful song. 
+
+
+# Top ten artist by Views, Stream and Total plays
+
+To analyze the outliers showed in the histograms, the top ten artists will be show in horizontal bar graphs. The factors to see how sucessful is a song are: Total views in youtube, total streams in spotify, and the total of plays of each song (views + streams)  
+
+```{r}
+# create a tibble with the top 10 artists by views
+top_artists_views <- tb %>%
+  group_by(Artist) %>%
+  summarise(total_views = sum(Views)) %>%
+  ungroup() %>%
+  arrange(desc(total_views)) %>%
+  slice(1:10)
+
+# create a horizontal bar chart of the top 10 artists by views
+ggplot(top_artists_views, aes(x = total_views, y = reorder(Artist, total_views))) +
+  geom_col(color = "black", fill = "lightblue") +
+  labs(title = "Top 10 artists by views", x = "Total views", y = "Artist") +
+  theme(legend.position = "none")
+
+# create a tibble with the top 10 artists by stream
+top_artists_stream <- tb %>%
+  group_by(Artist) %>%
+  summarise(total_streams = sum(Stream)) %>%
+  ungroup() %>%
+  arrange(desc(total_streams)) %>%
+  slice(1:10)
+
+# create a horizontal bar chart of the top 10 artists by stream
+ggplot(top_artists_stream, aes(x = total_streams, y = reorder(Artist, total_streams))) +
+  geom_col(color = "black", fill = "lightblue") +
+  labs(title = "Top 10 artists by stream", x = "Total streams", y = "Artist") +
+  theme(legend.position = "none")
+
+# create a tibble with the top 10 artists by total_plays
+top_artists_total_plays <- tb %>%
+  group_by(Artist) %>%
+  summarise(total_plays = sum(Views) + sum(Stream)) %>%
+  ungroup() %>%
+  arrange(desc(total_plays)) %>%
+  slice(1:10)
+
+# create a horizontal bar chart of the top 10 artists by total_plays
+ggplot(top_artists_total_plays, aes(x = total_plays, y = reorder(Artist, total_plays))) +
+  geom_col(color = "black", fill = "lightblue") +
+  labs(title = "Top 10 artists by total plays", x = "Total plays", y = "Artist") +
+  theme(legend.position = "none")
+
+```
+
+The graphs shows different artists according what variable we compare. In  case of the views Katy Perry is the artist number one and Colplay is the artist number one by stream and by total plays. 
+
+# Top ten songs by Views, Stream and Total plays
+
+```{r}
+# create a tibble with the top 10 songs by views
+top_songs_views <- tb %>%
+  group_by(Track, Artist) %>%
+  summarise(total_views = sum(Views)) %>%
+  ungroup() %>%
+  arrange(desc(total_views)) %>%
+  slice(1:10)
+
+# create a horizontal bar chart of the top 10 songs by views
+ggplot(top_songs_views, aes(x = total_views, y = reorder(paste(Track, " - ", Artist), total_views))) +
+  geom_col(color = "black", fill = "lightblue") +
+  labs(title = "Top 10 songs by views", x = "Total views", y = "Song - Artist") +
+  theme(legend.position = "none")
+
+# create a tibble with the top 10 songs by stream
+top_songs_stream <- tb %>%
+  group_by(Track, Artist) %>%
+  summarise(total_streams = sum(Stream)) %>%
+  ungroup() %>%
+  arrange(desc(total_streams)) %>%
+  slice(1:10)
+
+# create a horizontal bar chart of the top 10 songs by stream
+ggplot(top_songs_stream, aes(x = total_streams, y = reorder(paste(Track, " - ", Artist), total_streams))) +
+  geom_col(color = "black", fill = "lightblue") +
+  labs(title = "Top 10 songs by stream", x = "Total streams", y = "Song - Artist") +
+  theme(legend.position = "none")
+
+# create a tibble with the top 10 songs by total_plays
+top_songs_total_plays <- tb %>%
+  group_by(Track, Artist) %>%
+  summarise(total_plays = sum(Views) + sum(Stream)) %>%
+  ungroup() %>%
+  arrange(desc(total_plays)) %>%
+  slice(1:10)
+
+# create a horizontal bar chart of the top 10 songs by total_plays
+ggplot(top_songs_total_plays, aes(x = total_plays, y = reorder(paste(Track, " - ", Artist), total_plays))) +
+  geom_col(color = "black", fill = "lightblue") +
+  labs(title = "Top 10 songs by total plays", x = "Total plays", y = "Song - Artist") +
+  theme(legend.position = "none") 
+
+
+```
+
+According the graphs the top one songs are Despacito, Blinding Lights and Despacito by number of views, number of streams and by total plays respectively. 
+
+
+# Conclusions and next steps 
+
+* The success of an artist or a song can vary according the method that we choose to compare how is their performance. 
+* Artists can be classified into three groups based on their success. The first group includes those who have all of their songs in the top ten, like Daddy Yankee, as well as a single hit. The second group includes artists who have multiple successful songs that allow them to be part of the top ten, such as Coldplay. The third group includes artists who have one hit wonder that gives them a position in the top ten most played songs, like PSY with "Gangnam Style".
+* To conduct a deeper analysis, it is recommended to implement predictive models that can classify songs based on their characteristics and attempt to predict whether a song will be successful or not on different platforms.
